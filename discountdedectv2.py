@@ -12,6 +12,12 @@ webhook_url = ""  # Global variable to hold the webhook URL
 monitoring_threads = []  # List to hold monitoring threads
 products = []  # List to store product information (URL and Name)
 
+def extract_numeric_value(text):
+    try:
+        return float(''.join(filter(str.isdigit, text)))
+    except ValueError:
+        return None
+
 def open_github():
     webbrowser.open_new("https://github.com/alperkyoruk")
 
@@ -26,7 +32,7 @@ def get_product_info_cimri(url):
     soup = BeautifulSoup(response.content, 'html.parser')
     price_div = soup.find('span', {'class': 's1wl91l5-4 cBVHJG'})
     if price_div:
-        price = price_div.text.strip()
+        price = price = extract_numeric_value(price_div.text)
     else:
         price = "Price not available"
 
@@ -47,8 +53,9 @@ def get_product_info_itopya(url):
     soup = BeautifulSoup(response.content, 'html.parser')
     price_div = soup.find('div', {'class': 'amount my-3'})
     if price_div:
-        price = price_div.text.strip()
-    
+        price = price = extract_numeric_value(price_div.text)
+    else:
+        price = "Price not available"
 
     return price
 
@@ -62,9 +69,8 @@ def get_product_info_trendyol(url):
     response = requests.get(url)
     soup = BeautifulSoup(response.content, 'html.parser')
     price_div = soup.find('div', {'class': 'pr-bx-w'})
-
     if price_div:
-        price = price_div.text.strip()
+        price = price = extract_numeric_value(price_div.text)
     else:
         price = "Price not available"
 
@@ -93,33 +99,40 @@ def start_monitoring():
         url = product["url"]
         product_name = product["name"]
         interval = int(interval_entry.get()) * 60
+        discount_percentage = float(discount_entry.get())
 
         try:
             # Fetch initial product information
             if "cimri" in url:
-                initial_price = get_product_info_cimri(url)
+                initial_price = float(get_product_info_cimri(url))
             elif "itopya" in url:
-                initial_price = get_product_info_itopya(url)
+                initial_price = float(get_product_info_itopya(url))
             elif "trendyol" in url:
-                initial_price = get_product_info_trendyol(url)
+                initial_price = float(get_product_info_trendyol(url))
             else:
                 messagebox.showwarning("Warning", f"No site selected for {url}.")
                 return
+            
+            discounted_price = int(initial_price) - (int(initial_price) * discount_percentage / 100)
 
-            send_message(webhook_url, f"Product Name: {product_name}\nProduct Price: {initial_price}\n URL: {url}")
+            send_message(webhook_url, f"Product Name: {product_name}\nProduct Price: {initial_price}TL\n Will be notified when the price drops below {discounted_price}TL\n URL: {url} ")
 
             while True:
                 current_price = ""
 
                 if "cimri" in url:
-                    current_price = get_product_info_cimri(url)
+                    current_price = float(get_product_info_cimri(url))
                 elif "trendyol" in url:
-                    current_price = get_product_info_trendyol(url)
+                    current_price = float(get_product_info_trendyol(url))
                 elif "itopya" in url:
-                    current_price = get_product_info_itopya(url)
+                    current_price = float(get_product_info_itopya(url))
 
-                if current_price and current_price != initial_price:
-                    send_message(webhook_url, f"Product price has changed!\nNew Price for {product_name}: {current_price} Here: {url}")
+                discounted_price = int(initial_price) - (int(initial_price) * discount_percentage / 100)
+
+                if current_price and current_price <= discounted_price:
+                    send_message(webhook_url, f"Product price has dropped below the discounted price!\n"
+                                          f"Product Name: {product_name}\nDiscounted Price: {discounted_price} TL\n"
+                                          f"Current Price: {current_price} TL\nURL: {url}")
                     initial_price = current_price
 
 
